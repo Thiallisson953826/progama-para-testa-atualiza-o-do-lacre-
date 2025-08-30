@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime
-import win32com.client as win32  # Para enviar e-mail pelo Outlook logado no Windows
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 st.set_page_config(page_title="📦 Coleta por Palete")
 st.title("📦 Coleta de Palete e Lacres")
@@ -42,7 +44,7 @@ elif st.session_state.etapa == 3:
             st.session_state.lacres = lacres_input
             st.session_state.etapa = 4
 
-# Etapa final: Envio do e-mail via Outlook com validação final
+# Etapa final: Envio do e-mail via SMTP
 if st.session_state.etapa == 4:
     email_opcoes = {
         "EHC - eslandialia@hotmail.com": "eslandialia@hotmail.com",
@@ -67,18 +69,33 @@ if st.session_state.etapa == 4:
             st.warning("⚠️ Nenhum e-mail selecionado!")
         else:
             try:
-                # Inicia o Outlook logado no Windows
-                outlook = win32.Dispatch('outlook.application')
-                mail = outlook.CreateItem(0)
-                mail.To = "; ".join([email_opcoes[n] for n in emails_destino])
-                mail.Subject = f"Coleta {palete} - {loja}"
-                mail.Body = f"""
+                # Configurações do Outlook/Office365
+                SMTP_SERVER = "smtp.office365.com"
+                SMTP_PORT = 587
+                USER = st.secrets["username"]      # ex: "seu_email@empresa.com.br"
+                PASSWORD = st.secrets["password"]  # senha real ou app password
+
+                emails_real = [email_opcoes[nome] for nome in emails_destino]
+
+                msg = MIMEMultipart()
+                msg["Subject"] = f"Coleta {palete} - {loja}"
+                msg["From"] = USER
+                msg["To"] = ", ".join(emails_real)
+
+                corpo = f"""
 📦 Palete: {palete}
 🔒 Lacres: {', '.join(lacre_unicos)}
 🏬 Loja: {loja}
 🕒 Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 """
-                mail.Send()
-                st.success("✅ E-mail enviado com sucesso pelo Outlook!")
+                msg.attach(MIMEText(corpo, "plain"))
+
+                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+                server.starttls()
+                server.login(USER, PASSWORD)
+                server.sendmail(USER, emails_real, msg.as_string())
+                server.quit()
+
+                st.success("✅ E-mail enviado com sucesso!")
             except Exception as e:
                 st.error(f"❌ Erro ao enviar: {e}")
