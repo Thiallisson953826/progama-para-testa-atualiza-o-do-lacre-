@@ -65,10 +65,11 @@ if st.session_state.etapa == 4:
         if not emails_destino:
             st.warning("⚠️ Nenhum e-mail selecionado!")
         else:
-            SMTP_SERVER = st.secrets["smtp_server"]
-            SMTP_PORT = st.secrets["smtp_port"]
-            USER = st.secrets["username"]
-            PASSWORD = st.secrets["password"]
+            # Configurações do Outlook/Office365
+            SMTP_SERVER = "smtp.office365.com"
+            SMTP_PORT = 587
+            USER = st.secrets["username"]      # exemplo: "csaidcpmr@armazemparaiba.com.br"
+            PASSWORD = st.secrets["password"]  # sua senha real ou App Password
 
             emails_real = [email_opcoes[nome] for nome in emails_destino]
 
