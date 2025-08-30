@@ -47,7 +47,6 @@ elif st.session_state.etapa == 3:
 # Etapa final: Envio do e-mail
 if st.session_state.etapa == 4:
     email_opcoes = {
-        "TLC - thiallisson@live.com": "thiallisson@live.com",
         "EHC - eslandialia@hotmail.com": "eslandialia@hotmail.com",
         "WGC - Wolfman13690@gmail.com": "Wolfman13690@gmail.com",
         "EPA - Edvaldo.pereira@armazemparaiba.com.br": "Edvaldo.pereira@armazemparaiba.com.br"
