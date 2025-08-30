@@ -1,8 +1,6 @@
 import streamlit as st
 from datetime import datetime
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import win32com.client as win32  # Para enviar e-mail pelo Outlook logado no Windows
 
 st.set_page_config(page_title="📦 Coleta por Palete")
 st.title("📦 Coleta de Palete e Lacres")
@@ -44,7 +42,7 @@ elif st.session_state.etapa == 3:
             st.session_state.lacres = lacres_input
             st.session_state.etapa = 4
 
-# Etapa final: Envio do e-mail
+# Etapa final: Envio do e-mail via Outlook com validação final
 if st.session_state.etapa == 4:
     email_opcoes = {
         "EHC - eslandialia@hotmail.com": "eslandialia@hotmail.com",
@@ -62,37 +60,25 @@ if st.session_state.etapa == 4:
         lacre_list = [l.strip() for l in lacres_raw.replace('\n', ',').split(',') if l.strip()]
         lacre_unicos = list(dict.fromkeys(lacre_list))
 
-        if not emails_destino:
+        # Validação final de duplicados
+        if len(lacre_list) != len(lacre_unicos):
+            st.error("⚠️ Existem lacres duplicados! Corrija antes de enviar.")
+        elif not emails_destino:
             st.warning("⚠️ Nenhum e-mail selecionado!")
         else:
-            # Configurações do Outlook/Office365
-            SMTP_SERVER = "smtp.office365.com"
-            SMTP_PORT = 587
-            USER = st.secrets["username"]      # exemplo: "csaidcpmr@armazemparaiba.com.br"
-            PASSWORD = st.secrets["password"]  # sua senha real ou App Password
-
-            emails_real = [email_opcoes[nome] for nome in emails_destino]
-
-            msg = MIMEMultipart()
-            msg["Subject"] = f"Coleta {palete} - {loja}"
-            msg["From"] = USER
-            msg["To"] = ", ".join(emails_real)
-
-            corpo = f"""
+            try:
+                # Inicia o Outlook logado no Windows
+                outlook = win32.Dispatch('outlook.application')
+                mail = outlook.CreateItem(0)
+                mail.To = "; ".join([email_opcoes[n] for n in emails_destino])
+                mail.Subject = f"Coleta {palete} - {loja}"
+                mail.Body = f"""
 📦 Palete: {palete}
 🔒 Lacres: {', '.join(lacre_unicos)}
 🏬 Loja: {loja}
 🕒 Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 """
-
-            msg.attach(MIMEText(corpo, "plain"))
-
-            try:
-                server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-                server.starttls()
-                server.login(USER, PASSWORD)
-                server.sendmail(USER, emails_real, msg.as_string())
-                server.quit()
-                st.success("✅ E-mail enviado com sucesso!")
+                mail.Send()
+                st.success("✅ E-mail enviado com sucesso pelo Outlook!")
             except Exception as e:
                 st.error(f"❌ Erro ao enviar: {e}")
