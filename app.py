@@ -1,8 +1,9 @@
 import streamlit as st
-from datetime import datetime
+import re
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from datetime import datetime
 
 st.set_page_config(page_title="📦 Coleta por Palete")
 st.title("📦 Coleta de Palete e Lacres")
@@ -10,8 +11,10 @@ st.title("📦 Coleta de Palete e Lacres")
 # Inicializa variáveis de estado
 if "etapa" not in st.session_state:
     st.session_state.etapa = 1
+if "emails_adicionais" not in st.session_state:
+    st.session_state.emails_adicionais = []
 
-# Funções para mudança de etapa automática
+# Funções para avanço de etapa automático
 def avancar_etapa_1():
     if st.session_state.loja_input.strip():
         st.session_state.loja = st.session_state.loja_input.strip()
@@ -30,7 +33,7 @@ if st.session_state.etapa == 1:
 elif st.session_state.etapa == 2:
     st.text_input("Bipar Palete e aperte ENTER", key="palete_input", on_change=avancar_etapa_2)
 
-# Etapa 3: Lacres com validação imediata
+# Etapa 3: Lacres com validação
 elif st.session_state.etapa == 3:
     lacres_input = st.text_area("Bipar os Lacres (um por linha ou separados por vírgula)", key="lacres_input")
 
@@ -44,58 +47,86 @@ elif st.session_state.etapa == 3:
             st.session_state.lacres = lacres_input
             st.session_state.etapa = 4
 
-# Etapa final: Envio do e-mail via SMTP
+# Etapa 4: Envio de e-mails
 if st.session_state.etapa == 4:
     email_opcoes = {
+        "TLC - thiallisson@live.com": "thiallisson@live.com",
         "EHC - eslandialia@hotmail.com": "eslandialia@hotmail.com",
         "WGC - Wolfman13690@gmail.com": "Wolfman13690@gmail.com",
         "EPA - Edvaldo.pereira@armazemparaiba.com.br": "Edvaldo.pereira@armazemparaiba.com.br"
     }
 
-    emails_destino = st.multiselect("Escolha os e-mails para envio", options=list(email_opcoes.keys()))
+    st.subheader("📧 E-mails de destino")
+    emails_destino = st.multiselect("Escolha os e-mails da lista", options=list(email_opcoes.keys()))
 
+    # Campo para adicionar e-mails extras
+    novo_email = st.text_input("Ou digite um e-mail manualmente e aperte ENTER", key="email_livre")
+    if novo_email:
+        if re.match(r"[^@]+@[^@]+\.[^@]+", novo_email):
+            if novo_email not in st.session_state.emails_adicionais:
+                st.session_state.emails_adicionais.append(novo_email)
+                st.success(f"✅ E-mail adicionado: {novo_email}")
+                if "email_livre" in st.session_state:
+                    st.session_state.email_livre = ""
+                st.experimental_rerun()
+        else:
+            st.error("❌ E-mail inválido. Verifique e tente novamente.")
+
+    # Mostrar e-mails manuais adicionados
+    if st.session_state.emails_adicionais:
+        st.write("📌 E-mails manuais adicionados:")
+        for e in st.session_state.emails_adicionais:
+            st.write(f"• {e}")
+
+    # Mostrar lista final de e-mails
+    emails_real = [email_opcoes[nome] for nome in emails_destino] + st.session_state.emails_adicionais
+    if emails_real:
+        st.write("📬 Lista final de e-mails que receberão a coleta:")
+        for e in emails_real:
+            st.write(f"• {e}")
+
+    # Botão de envio
     if st.button("Enviar"):
         loja = st.session_state.get("loja", "").strip()
         palete = st.session_state.get("palete", "").strip()
-        lacres_raw = st.session_state.get("lacre_input", st.session_state.get("lacres", ""))
-
+        lacres_raw = st.session_state.get("lacres", "")
         lacre_list = [l.strip() for l in lacres_raw.replace('\n', ',').split(',') if l.strip()]
         lacre_unicos = list(dict.fromkeys(lacre_list))
 
-        # Validação final de duplicados
-        if len(lacre_list) != len(lacre_unicos):
-            st.error("⚠️ Existem lacres duplicados! Corrija antes de enviar.")
-        elif not emails_destino:
-            st.warning("⚠️ Nenhum e-mail selecionado!")
+        if not emails_real:
+            st.warning("⚠️ Nenhum e-mail selecionado ou digitado!")
         else:
-            try:
-                # Configurações do Outlook/Office365
-                SMTP_SERVER = "smtp.office365.com"
-                SMTP_PORT = 587
-                USER = st.secrets["username"]      # ex: "seu_email@empresa.com.br"
-                PASSWORD = st.secrets["password"]  # senha real ou app password
+            SMTP_SERVER = st.secrets["smtp_server"]
+            SMTP_PORT = st.secrets["smtp_port"]
+            USER = st.secrets["username"]
+            PASSWORD = st.secrets["password"]
 
-                emails_real = [email_opcoes[nome] for nome in emails_destino]
+            msg = MIMEMultipart()
+            msg["Subject"] = f"Coleta {palete} - {loja}"
+            msg["From"] = USER
+            msg["To"] = ", ".join(emails_real)
 
-                msg = MIMEMultipart()
-                msg["Subject"] = f"Coleta {palete} - {loja}"
-                msg["From"] = USER
-                msg["To"] = ", ".join(emails_real)
-
-                corpo = f"""
+            corpo = f"""
 📦 Palete: {palete}
 🔒 Lacres: {', '.join(lacre_unicos)}
 🏬 Loja: {loja}
 🕒 Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 """
-                msg.attach(MIMEText(corpo, "plain"))
+            msg.attach(MIMEText(corpo, "plain"))
 
+            try:
                 server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
                 server.starttls()
                 server.login(USER, PASSWORD)
                 server.sendmail(USER, emails_real, msg.as_string())
                 server.quit()
-
                 st.success("✅ E-mail enviado com sucesso!")
+
+                # Limpa os dados após envio
+                st.session_state.etapa = 1
+                st.session_state.emails_adicionais = []
+                st.session_state.loja_input = ""
+                st.session_state.palete_input = ""
+                st.session_state.lacres_input = ""
             except Exception as e:
                 st.error(f"❌ Erro ao enviar: {e}")
